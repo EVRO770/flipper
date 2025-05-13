@@ -23,7 +23,7 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 const HISTORY_FILE = './messages.json';
 
-// Чтение истории сообщений при запуске
+// Загружаем историю сообщений из файла при запуске
 let messageHistory = [];
 if (fs.existsSync(HISTORY_FILE)) {
   try {
@@ -34,23 +34,30 @@ if (fs.existsSync(HISTORY_FILE)) {
   }
 }
 
-// Подключение сокетов
+// Обработка подключений
 io.on('connection', socket => {
-  console.log('✅ Новый пользователь подключился');
+  console.log('🔌 Пользователь подключился');
 
-  // Отправляем историю
+  // Отправка истории сообщений новому клиенту
   socket.emit('history', messageHistory);
 
-  // Получение нового сообщения
+  // Обработка новых сообщений
   socket.on('message', data => {
     messageHistory.push(data);
-    if (messageHistory.length > 100) messageHistory.shift(); // ограничим историю
+    if (messageHistory.length > 100) messageHistory.shift(); // обрезаем до 100 сообщений
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(messageHistory, null, 2));
-    io.emit('message', data);
+    io.emit('message', data); // отправляем всем
+  });
+
+  // Обработка запроса на очистку чата
+  socket.on('clear', () => {
+    messageHistory = [];
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify([]));
+    io.emit('history', []); // очищаем чат у всех клиентов
+    console.log('🧹 История чата очищена');
   });
 });
 
-// Запуск сервера
 server.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
 });
