@@ -1,39 +1,56 @@
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
+const cors = require('cors');
+const { Server } = require('socket.io');
 const fs = require('fs');
-const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
+
+app.use(cors({
+  origin: 'https://front-one-eta.vercel.app',
+  methods: ['GET', 'POST'],
+  credentials: true
+}));
+
+const io = new Server(server, {
   cors: {
-    origin: '*'
+    origin: 'https://front-one-eta.vercel.app',
+    methods: ['GET', 'POST']
   }
 });
 
-// Хранилище сообщений
-const messagesFile = path.join(__dirname, 'messages.json');
-let messages = [];
+const PORT = process.env.PORT || 3000;
+const HISTORY_FILE = './messages.json';
 
-if (fs.existsSync(messagesFile)) {
-  messages = JSON.parse(fs.readFileSync(messagesFile));
+// Чтение истории сообщений при запуске
+let messageHistory = [];
+if (fs.existsSync(HISTORY_FILE)) {
+  try {
+    const data = fs.readFileSync(HISTORY_FILE, 'utf-8');
+    messageHistory = JSON.parse(data);
+  } catch (e) {
+    console.error('Ошибка чтения истории:', e);
+  }
 }
 
+// Подключение сокетов
 io.on('connection', socket => {
-  console.log('Пользователь подключился');
-  socket.emit('history', messages);
+  console.log('✅ Новый пользователь подключился');
 
+  // Отправляем историю
+  socket.emit('history', messageHistory);
+
+  // Получение нового сообщения
   socket.on('message', data => {
-    messages.push(data);
-    fs.writeFileSync(messagesFile, JSON.stringify(messages, null, 2));
+    messageHistory.push(data);
+    if (messageHistory.length > 100) messageHistory.shift(); // ограничим историю
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(messageHistory, null, 2));
     io.emit('message', data);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Пользователь отключился');
   });
 });
 
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
+// Запуск сервера
+server.listen(PORT, () => {
+  console.log(`🚀 Сервер запущен на порту ${PORT}`);
+});
